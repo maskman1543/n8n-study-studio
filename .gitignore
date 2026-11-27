@@ -1,0 +1,12 @@
+# Local study data
+study_library.sqlite3
+*.sqlite3
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example

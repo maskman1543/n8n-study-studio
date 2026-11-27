@@ -1,0 +1,311 @@
+{
+  "name": "Study Studio - Notes to Study Pack",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "study-studio-analyze",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "e0f71f17-13ee-4ca9-9e7a-4e4879524451",
+      "name": "Study Studio Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "9c08714a-792c-4cf5-9a2b-57e5215df3b8"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst body = item.json.body ?? {};\nconst goal = String(body.goal || 'Help me understand and remember this material');\nconst notes = String(body.notes || '').trim();\nconst requestedCount = Number(body.questionCount || 5);\nconst questionCount = Number.isInteger(requestedCount) ? Math.min(50, Math.max(1, requestedCount)) : 5;\nconst binaries = item.binary ?? {};\nconst pdfFiles = Object.entries(binaries).filter(([name, file]) =>\n  String(file.fileName || name).toLowerCase().endsWith('.pdf') || file.mimeType === 'application/pdf'\n);\n\nif (pdfFiles.length === 0) {\n  return [{ json: { hasPdf: false, goal, notes, questionCount } }];\n}\n\nreturn pdfFiles.map(([name, file]) => ({\n  json: { hasPdf: true, goal, notes, questionCount, fileName: file.fileName || name },\n  binary: { data: file },\n}));"
+      },
+      "id": "42a2df3e-0bb7-4fa7-92d2-8272de207d9d",
+      "name": "Prepare Uploaded PDFs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Create a study pack using only the source material below. Follow the learner's goal. If the source does not contain enough information for a requested point, say so in the explanation rather than inventing facts.\n\nInclude a multiple-choice quiz in the `questions` array. Generate up to {{ $json.questionCount }} questions; aim for that number when the source supports it, and generate fewer rather than inventing. Each question must have exactly 4 distinct answer options and exactly 1 correct option. Set `answerIndex` to the zero-based index of the correct option (0 is the first option). Make each explanation say why the correct answer follows from the source.\n\nLEARNING GOAL\n{{ $json.goal }}\n\nSOURCE MATERIAL\n{{ $json.sourceText }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "83c60c42-e6e4-4a53-8c78-67216bde2fe5",
+      "name": "Generate Study Pack",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "47138b7c-0fe1-4dab-8cbd-38944525f683",
+      "name": "Choose Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        700,
+        540
+      ],
+      "notesInFlow": true,
+      "notes": "After importing, open this node, choose your chat model, and select or create its API credential. You can replace this node with another n8n chat model node if you use a different provider."
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"title\": {\n      \"type\": \"string\"\n    },\n    \"summary\": {\n      \"type\": \"string\"\n    },\n    \"keyConcepts\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"title\": {\n            \"type\": \"string\"\n          },\n          \"explanation\": {\n            \"type\": \"string\"\n          },\n          \"example\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"title\",\n          \"explanation\"\n        ],\n        \"additionalProperties\": false\n      }\n    },\n    \"flashcards\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"front\": {\n            \"type\": \"string\"\n          },\n          \"back\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"front\",\n          \"back\"\n        ],\n        \"additionalProperties\": false\n      }\n    },\n    \"questions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"question\": {\n            \"type\": \"string\"\n          },\n          \"options\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"type\": \"string\"\n            },\n            \"minItems\": 4,\n            \"maxItems\": 4\n          },\n          \"answerIndex\": {\n            \"type\": \"integer\",\n            \"minimum\": 0,\n            \"maximum\": 3\n          },\n          \"explanation\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"question\",\n          \"options\",\n          \"answerIndex\",\n          \"explanation\"\n        ],\n        \"additionalProperties\": false\n      }\n    }\n  },\n  \"required\": [\n    \"title\",\n    \"summary\",\n    \"keyConcepts\",\n    \"flashcards\",\n    \"questions\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "id": "a45df0ba-4c20-424b-8ec9-10f876ff00d9",
+      "name": "Study Pack JSON Format",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        940,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.output }}",
+        "options": {}
+      },
+      "id": "cd39974d-9dcc-4939-86e9-8e1287154cc6",
+      "name": "Return Study Pack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup after import\n1. Open **Choose Chat Model**, select your model and credentials.\n2. Import this updated workflow into n8n and publish it before using its Production URL.\n3. PDF uploads from Study Studio are split into files, extracted with **Extract PDF Text**, and combined with any pasted notes before reaching the model. TXT, Markdown, and CSV files are read in the browser and sent as notes.\n4. Scanned PDFs need an OCR step; this workflow only extracts embedded PDF text.\n5. For a notes-only test, select **Listen for Test Event** on the Webhook node, then submit notes from Study Studio.\n6. Set **Allowed Origins (CORS)** to the origin serving your HTML. Restrict it for a deployed page.\n\nThe Webhook receives files under the multipart `files` field. The preparation Code node finds uploaded PDF binaries even when multiple files are present. It stops with a clear error if no usable source text reaches the model.\n\nThe study pack includes a multiple-choice quiz: up to five questions with four options each and a zero-based correct-answer index.\nThe HTML form lets learners request 1–50 quiz questions (default 5); the workflow uses that count as an upper target and will not invent questions to fill it.",
+        "height": 440,
+        "width": 550,
+        "color": 5
+      },
+      "id": "7779a880-34a6-4e2c-98ec-2cdbff3fdc58",
+      "name": "Read Me - Setup and File Extraction",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "be3c19bf-e128-4a9f-9651-b42fd06a32f8",
+              "leftValue": "={{ $json.hasPdf }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c3e3f0d-2a88-43f8-8d9c-90d1e0c6164c",
+      "name": "PDF uploaded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "id": "718bea51-416c-4bda-9753-1c7eb797887c",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nif (!items.length) throw new Error('No PDF text was extracted.');\n\nconst first = items[0].json;\nconst notes = String(first.notes || '').trim();\nconst pdfText = items.map((item, index) => {\n  const text = String(item.json.text || '').trim();\n  if (!text) return '';\n  const filename = item.json.fileName || `PDF ${index + 1}`;\n  return `--- ${filename} ---\\n${text}`;\n}).filter(Boolean);\nconst sourceText = [notes, ...pdfText].filter(Boolean).join('\\n\\n');\nif (!sourceText.trim()) {\n  throw new Error('The uploaded PDF produced no readable text. If it is a scanned document, add OCR before generating the study pack.');\n}\n\nreturn [{ json: { goal: first.goal, sourceText, questionCount: first.questionCount } }];"
+      },
+      "id": "53a2dff7-095e-407e-9562-7d276140eb13",
+      "name": "Combine PDF and Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst sourceText = String(item.json.notes || '').trim();\nif (!sourceText) throw new Error('No source material was received. Upload a PDF or paste notes before generating a study pack.');\nreturn [{ json: { goal: item.json.goal, sourceText, questionCount: item.json.questionCount } }];"
+      },
+      "id": "31ca6952-763c-4dd7-8dde-1b91bb7dc12e",
+      "name": "Use Pasted Notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        420
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Study Studio Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Uploaded PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Uploaded PDFs": {
+      "main": [
+        [
+          {
+            "node": "PDF uploaded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF uploaded?": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Pasted Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Combine PDF and Notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine PDF and Notes": {
+      "main": [
+        [
+          {
+            "node": "Generate Study Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Pasted Notes": {
+      "main": [
+        [
+          {
+            "node": "Generate Study Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Study Pack",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Study Pack JSON Format": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate Study Pack",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Study Pack": {
+      "main": [
+        [
+          {
+            "node": "Return Study Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e9fbefee-5953-4456-b97a-0d7585be5ee2",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
